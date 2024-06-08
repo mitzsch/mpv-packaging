@@ -104,7 +104,7 @@ function Extract-Archive ($file) {
 function Get-Latest-Mpv($Arch) {
     $filename = ""
     $download_link = ""
-    $api_gh = "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
+    $api_gh = "https://api.github.com/repos/mitzsch/mpv-winbuild/releases/latest"
     $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
     $filename = $json.assets | where { $_.name -Match "mpv-$Arch-[0-9]{8}" } | Select-Object -ExpandProperty name
     $download_link = $json.assets | where { $_.name -Match "mpv-$Arch-[0-9]{8}" } | Select-Object -ExpandProperty browser_download_url
@@ -138,7 +138,7 @@ function Get-Latest-Ytplugin ($plugin) {
 }
 
 function Get-Latest-FFmpeg ($Arch) {
-    $api_gh = "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
+    $api_gh = "https://api.github.com/repos/mitzsch/mpv-winbuild/releases/latest"
     $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
     $filename = $json.assets | where { $_.name -Match "ffmpeg-$Arch-git-" } | Select-Object -ExpandProperty name
     $download_link = $json.assets | where { $_.name -Match "ffmpeg-$Arch-git-" } | Select-Object -ExpandProperty browser_download_url
