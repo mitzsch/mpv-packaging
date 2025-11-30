@@ -494,28 +494,33 @@ function Upgrade-Ytplugin {
         }
         else {
             Write-Host "Newer" (Get-Item $yt).BaseName "build available" -ForegroundColor Green
-            if ((Get-Item $yt).BaseName -Match "yt-dlp*") {
-                $ytdlp_channel = Check-Ytdlp-Channel
-                & $yt --update-to $ytdlp_channel
-            }
-            else {
-                & $yt --update
-            }
+            & $yt --update
         }
     }
     else {
         Write-Host "ytdlp or youtube-dl doesn't exist. " -ForegroundColor Green -NoNewline
-        $ytdl = Check-GetYTDL
-        if ($ytdl -eq 'ytdlp') {
-            $latest_release = Get-Latest-Ytplugin "yt-dlp"
-            Download-Ytplugin "yt-dlp" $latest_release
-        }
-        elseif ($ytdl -eq 'youtubedl') {
-            $latest_release = Get-Latest-Ytplugin "youtube-dl"
-            Download-Ytplugin "youtube-dl" $latest_release
-        }
-        elseif ($ytdl -ne 'false') {
-            throw "Please enter valid input key."
+        $result = Read-KeyOrTimeout "Proceed with downloading? [Y/n] (default=n)" "N"
+        Write-Host ""
+        if ($result -eq 'Y') {
+            $result_exe = Read-KeyOrTimeout "Download ytdlp or youtubedl? [1=ytdlp/2=youtubedl] (default=1)" "D1"
+            Write-Host ""
+            if ($result_exe -eq 'D1') {
+                $latest_release = Get-Latest-Ytplugin "yt-dlp"
+                Download-Ytplugin "yt-dlp" $latest_release
+                Write-Host "Deno is required for yt-dlp's Embedded JavaScript (EJS) features. See https://github.com/yt-dlp/yt-dlp/wiki/EJS" -ForegroundColor Green
+                $latest_txt = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
+                Download-Archive "deno-x86_64-pc-windows-msvc.zip" "https://dl.deno.land/release/$latest_txt/deno-x86_64-pc-windows-msvc.zip"
+                Check-7z
+                Extract-Archive "deno-x86_64-pc-windows-msvc.zip"
+                Check-Autodelete "deno-x86_64-pc-windows-msvc.zip"
+            }
+            elseif ($result_exe -eq 'D2') {
+                $latest_release = Get-Latest-Ytplugin "youtube-dl"
+                Download-Ytplugin "youtube-dl" $latest_release
+            }
+            else {
+                throw "Please enter valid input key."
+            }
         }
     }
 }
