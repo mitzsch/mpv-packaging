@@ -271,11 +271,6 @@ function Ensure-DenoForUpdate() {
     Check-Autodelete $archive
 }
 
-<#
-    Ensure-DenoForInstall
-    Purpose: Ensure Deno runtime is available during initial yt-dlp installation.
-    Behavior: If Deno is missing, prompt to download the latest stable; if present and older, offer upgrade; if already latest, do nothing.
-#>
 function Ensure-DenoForInstall() {
     $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
     $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
