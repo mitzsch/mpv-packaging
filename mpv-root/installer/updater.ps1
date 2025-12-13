@@ -226,43 +226,96 @@ function ExtractDateFromURL($filename) {
     return $matches[1]
 }
 
-function Check-DenoUpdate($channel) {
-    # Determine latest tag text based on yt-dlp channel
-    $tag_txt = ""
-    $download_url = ""
-    if ($channel -eq 'stable') {
-        $tag_txt = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
-        $download_url = "https://dl.deno.land/release/$tag_txt/deno-x86_64-pc-windows-msvc.zip"
-    }
-    else {
-        $tag_txt = (Invoke-WebRequest "https://dl.deno.land/canary-latest.txt" -UseBasicParsing).Content.Trim()
-        $download_url = "https://dl.deno.land/canary/$tag_txt/deno-x86_64-pc-windows-msvc.zip"
-    }
+function Ensure-DenoForUpdate() {
+    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
+    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
 
-    # If deno.exe exists, compare versions; else download
-    $denoExe = Join-Path (Get-Location) "deno.exe"
-    $need_download = $true
-    if (Test-Path $denoExe) {
+    $deno_exe = Join-Path (Get-Location) "deno.exe"
+    if (Test-Path $deno_exe) {
         try {
-            $current_version = (& $denoExe --version | Select-String "deno" | Select-Object -First 1).ToString()
-            # deno 1.41.0 (release, x86_64-pc-windows-msvc) or canary format
+            $current_version = (& $deno_exe --version | Select-String "deno" | Select-Object -First 1).ToString()
             $pattern = "deno\s+(?<ver>[0-9a-zA-Z\.-]+)"
             $m = [Regex]::Match($current_version, $pattern)
             if ($m.Success) {
                 $current_tag = $m.Groups['ver'].Value
-                # If current equals latest tag text, skip download
-                if ($current_tag -eq $tag_txt) { $need_download = $false }
+                $latest_norm = $remote_name.TrimStart('v')
+                if ($current_tag -eq $latest_norm) {
+                    Write-Host "You are already using latest Deno -- $remote_name" -ForegroundColor Green
+                    return
+                }
+                else {
+                    Write-Host "Newer Deno build available" -ForegroundColor Green
+                }
             }
         }
-        catch {
-            $need_download = $true
+        catch {}
+        $upgradePrompt = "Upgrade local Deno to latest stable now? [Y/n] (default=y)"
+        $upgradeResp = Read-KeyOrTimeout $upgradePrompt "Y"
+        Write-Host ""
+        if ($upgradeResp -eq 'Y') {
+            & $deno_exe upgrade --version $remote_name
         }
+        return
     }
 
-    if ($need_download) {
+    # No local deno
+    Write-Host "Deno doesn't exist. " -ForegroundColor Green -NoNewline
+    $resp = Read-KeyOrTimeout "Proceed with downloading? [Y/n] (default=y)" "Y"
+    Write-Host ""
+    if ($resp -ne 'Y') { return }
+    $archive = "deno-x86_64-pc-windows-msvc.zip"
+    Write-Host "Downloading Deno (stable) $remote_name" -ForegroundColor Green
+    Download-Archive $archive $download_link
+    Check-7z
+    Extract-Archive $archive
+    Check-Autodelete $archive
+}
+
+<#
+    Ensure-DenoForInstall
+    Purpose: Ensure Deno runtime is available during initial yt-dlp installation.
+    Behavior: If Deno is missing, prompt to download the latest stable; if present and older, offer upgrade; if already latest, do nothing.
+#>
+function Ensure-DenoForInstall() {
+    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
+    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
+
+    $deno_exe = Join-Path (Get-Location) "deno.exe"
+    if (Test-Path $deno_exe) {
+        # Deno already present locally; offer upgrade (same as update path)
+        try {
+            $current_version = (& $deno_exe --version | Select-String "deno" | Select-Object -First 1).ToString()
+            $pattern = "deno\s+(?<ver>[0-9a-zA-Z\.-]+)"
+            $m = [Regex]::Match($current_version, $pattern)
+            if ($m.Success) {
+                $current_tag = $m.Groups['ver'].Value
+                $latest_norm = $remote_name.TrimStart('v')
+                if ($current_tag -eq $latest_norm) {
+                    Write-Host "You are already using latest Deno -- $remote_name" -ForegroundColor Green
+                    return
+                }
+                else {
+                    Write-Host "Newer Deno build available" -ForegroundColor Green
+                }
+            }
+        }
+        catch {}
+        $upgradePrompt = "Upgrade local Deno to latest stable now? [Y/n] (default=y)"
+        $upgradeResp = Read-KeyOrTimeout $upgradePrompt "Y"
+        Write-Host ""
+        if ($upgradeResp -eq 'Y') {
+            & $deno_exe upgrade --version $remote_name
+        }
+        return
+    }
+    # No local deno; mirror mpv/ffmpeg existence prompt style
+    Write-Host "Deno doesn't exist. " -ForegroundColor Green -NoNewline
+    $resp = Read-KeyOrTimeout "Proceed with downloading? [Y/n] (default=y)" "Y"
+    Write-Host ""
+    if ($resp -eq 'Y') {
         $archive = "deno-x86_64-pc-windows-msvc.zip"
-        Write-Host "Downloading Deno ($channel) $tag_txt" -ForegroundColor Green
-        Download-Archive $archive $download_url
+        Write-Host "Downloading Deno (stable) $remote_name" -ForegroundColor Green
+        Download-Archive $archive $download_link
         Check-7z
         Extract-Archive $archive
         Check-Autodelete $archive
@@ -534,13 +587,17 @@ function Upgrade-Ytplugin {
         $latest_release = Get-Latest-Ytplugin((Get-Item $yt).BaseName)
         if ((& $yt --version) -match ($latest_release)) {
             Write-Host "You are already using latest" (Get-Item $yt).BaseName "-- $latest_release" -ForegroundColor Green
+            if ((Get-Item $yt).BaseName -Match "yt-dlp*") {
+                # Even if yt-dlp is up-to-date, ensure Deno runtime is updated
+                Ensure-DenoForUpdate
+            }
         }
         else {
             Write-Host "Newer" (Get-Item $yt).BaseName "build available" -ForegroundColor Green
             if ((Get-Item $yt).BaseName -Match "yt-dlp*") {
                 $ytdlp_channel = Check-Ytdlp-Channel
                 & $yt --update-to $ytdlp_channel
-                Check-DenoUpdate $ytdlp_channel
+                Ensure-DenoForUpdate
             }
             else {
                 & $yt --update
@@ -548,13 +605,14 @@ function Upgrade-Ytplugin {
         }
     }
     else {
-        # Use persisted setting to decide which plugin to install
+        Write-Host "ytdlp or youtube-dl doesn't exist. " -ForegroundColor Green -NoNewline
+         # Use persisted setting to decide which plugin to install
         $ytdl = Check-GetYTDL
         if ($ytdl -eq 'ytdlp') {
             $latest_release = Get-Latest-Ytplugin "yt-dlp"
             Download-Ytplugin "yt-dlp" $latest_release
             $ytdlp_channel = Check-Ytdlp-Channel
-            Check-DenoUpdate $ytdlp_channel
+            Ensure-DenoForInstall
         }
         elseif ($ytdl -eq 'youtubedl') {
             $latest_release = Get-Latest-Ytplugin "youtube-dl"
