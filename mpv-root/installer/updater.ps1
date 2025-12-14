@@ -269,9 +269,6 @@ function Ensure-Deno([string]$Context = "update") {
         return
     }
     # Fetch remote tag only if we are going to download
-    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing -UserAgent $useragent).Content.Trim()
-    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
-
     Write-Host "Deno is optional, but recommended for yt-dlp." -ForegroundColor Yellow
     Write-Host "yt-dlp uses external JS runtimes (EJS) to solve YouTube challenges; Deno is the default recommended runtime." -ForegroundColor Yellow
     Write-Host "You may skip this and configure Node, Bun, or QuickJS later (see: https://github.com/yt-dlp/yt-dlp/wiki/EJS)." -ForegroundColor Yellow
@@ -280,6 +277,8 @@ function Ensure-Deno([string]$Context = "update") {
     $resp = Read-KeyOrTimeout "Proceed with downloading Deno now? [Y/n] (default=y)" "Y"
     Write-Host ""
     if ($resp -ne 'Y') { return }
+    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing -UserAgent $useragent).Content.Trim()
+    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
     $archive = "deno-x86_64-pc-windows-msvc.zip"
     Write-Host "Downloading Deno (stable) $remote_name" -ForegroundColor Green
     Download-Archive $archive $download_link
