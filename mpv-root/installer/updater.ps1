@@ -253,7 +253,7 @@ function Ensure-Deno([string]$Context = "update") {
         $upgradeResp = Read-KeyOrTimeout $upgradePrompt "Y"
         Write-Host ""
         if ($upgradeResp -eq 'Y') {
-            & $deno_exe upgrade --version $remote_name
+            & $deno_exe upgrade
         }
         return
     }
