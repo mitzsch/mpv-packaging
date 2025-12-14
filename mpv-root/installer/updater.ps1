@@ -115,7 +115,7 @@ function Get-Latest-Mpv($Arch) {
     $filename = ""
     $download_link = ""
     $api_gh = "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
-    $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
+    $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing -UserAgent $useragent | ConvertFrom-Json
     $filename = $json.assets | where { $_.name -Match "mpv-$Arch-[0-9]{8}" } | Select-Object -ExpandProperty name
     $download_link = $json.assets | where { $_.name -Match "mpv-$Arch-[0-9]{8}" } | Select-Object -ExpandProperty browser_download_url
     if ($filename -is [array]) {
@@ -159,7 +159,7 @@ function Get-Latest-Ytplugin ($plugin) {
 
 function Get-Latest-FFmpeg ($Arch) {
     $api_gh = "https://api.github.com/repos/zhongfly/mpv-winbuild/releases/latest"
-    $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
+    $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing -UserAgent $useragent | ConvertFrom-Json
     $filename = $json.assets | where { $_.name -Match "ffmpeg-$Arch-git-" } | Select-Object -ExpandProperty name
     $download_link = $json.assets | where { $_.name -Match "ffmpeg-$Arch-git-" } | Select-Object -ExpandProperty browser_download_url
     if ($filename -is [array]) {
@@ -227,11 +227,10 @@ function ExtractDateFromURL($filename) {
 }
 
 function Ensure-Deno([string]$Context = "update") {
-    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing).Content.Trim()
-    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
-
     $deno_exe = Join-Path (Get-Location) "deno.exe"
     if (Test-Path $deno_exe) {
+        # Only fetch remote tag when Deno exists and we need to compare
+        $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing -UserAgent $useragent).Content.Trim()
         try {
             $current_version = (& $deno_exe --version | Select-String "deno" | Select-Object -First 1).ToString()
             $pattern = "deno\s+(?<ver>[0-9a-zA-Z\.-]+)"
@@ -248,7 +247,9 @@ function Ensure-Deno([string]$Context = "update") {
                 }
             }
         }
-        catch {}
+        catch {
+            Write-Host "Error checking current Deno version: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
         $upgradePrompt = "Upgrade local Deno to latest stable now? [Y/n] (default=y)"
         $upgradeResp = Read-KeyOrTimeout $upgradePrompt "Y"
         Write-Host ""
@@ -262,10 +263,19 @@ function Ensure-Deno([string]$Context = "update") {
     if ($Context -ne 'install') {
         return
     }
+    # Deno provides only x86_64 builds for Windows. Skip on 32-bit systems.
+    if (-Not (Test-Path (Join-Path $env:windir "SysWow64"))) {
+        Write-Host "Deno isn't available for 32-bit Windows (x86). Skipping." -ForegroundColor Yellow
+        return
+    }
+    # Fetch remote tag only if we are going to download
+    $remote_name = (Invoke-WebRequest "https://dl.deno.land/release-latest.txt" -UseBasicParsing -UserAgent $useragent).Content.Trim()
+    $download_link = "https://dl.deno.land/release/$remote_name/deno-x86_64-pc-windows-msvc.zip"
+
     Write-Host "Deno is optional, but recommended for yt-dlp." -ForegroundColor Yellow
     Write-Host "yt-dlp uses external JS runtimes (EJS) to solve YouTube challenges; Deno is the default recommended runtime." -ForegroundColor Yellow
     Write-Host "You may skip this and configure Node, Bun, or QuickJS later (see: https://github.com/yt-dlp/yt-dlp/wiki/EJS)." -ForegroundColor Yellow
-    Write-Host "" 
+    Write-Host ""
     Write-Host "Deno doesn't exist. " -ForegroundColor Green -NoNewline
     $resp = Read-KeyOrTimeout "Proceed with downloading Deno now? [Y/n] (default=y)" "Y"
     Write-Host ""
@@ -562,7 +572,7 @@ function Upgrade-Ytplugin {
     }
     else {
         Write-Host "ytdlp or youtube-dl doesn't exist. " -ForegroundColor Green -NoNewline
-         # Use persisted setting to decide which plugin to install
+        # Use persisted setting to decide which plugin to install
         $ytdl = Check-GetYTDL
         if ($ytdl -eq 'ytdlp') {
             $latest_release = Get-Latest-Ytplugin "yt-dlp"
